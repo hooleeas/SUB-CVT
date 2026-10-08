@@ -1,6 +1,6 @@
 # subconverter-new
 
-A subscription converter based on subconverter, with updated Sing-box output compatible with current Sing-box releases.
+A subscription converter based on [subconverter](https://github.com/tindy2013/subconverter) by [tindy2013](https://github.com/tindy2013), with updated Sing-box output compatible with current Sing-box releases.
 
 ## Docker
 
