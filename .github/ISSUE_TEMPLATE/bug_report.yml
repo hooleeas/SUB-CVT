@@ -10,7 +10,7 @@ body:
     id: version
     attributes:
       label: Version
-      placeholder: subconverter-new v0.9.10
+      placeholder: SUB-CVT v0.1.0
     validations:
       required: true
   - type: input

@@ -34,7 +34,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/hooleeas/subconverter-new
+          images: ghcr.io/hooleeas/sub-cvt
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
             type=ref,event=tag

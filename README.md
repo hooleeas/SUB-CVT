@@ -1,4 +1,4 @@
-# subconverter-new
+# SUB-CVT
 
 A subscription converter based on [subconverter](https://github.com/tindy2013/subconverter) by [tindy2013](https://github.com/tindy2013), with updated Sing-box output compatible with current Sing-box releases.
 
@@ -7,9 +7,9 @@ A subscription converter based on [subconverter](https://github.com/tindy2013/su
 Run the current image:
 
 ```bash
-docker run -d --name subconverter --restart=always \
+docker run -d --name sub-cvt --restart=always \
   -p 25500:25500 \
-  ghcr.io/hooleeas/subconverter-new:latest
+  ghcr.io/hooleeas/sub-cvt:latest
 ```
 
 Check the service:
@@ -21,16 +21,16 @@ curl http://localhost:25500/version
 Expected output:
 
 ```text
-subconverter-new v0.9.10 backend
+SUB-CVT v0.1.0
 ```
 
 Docker Compose:
 
 ```yaml
 services:
-  subconverter:
-    image: ghcr.io/hooleeas/subconverter-new:latest
-    container_name: subconverter
+  sub-cvt:
+    image: ghcr.io/hooleeas/sub-cvt:latest
+    container_name: sub-cvt
     ports:
       - "25500:25500"
     restart: always

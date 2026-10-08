@@ -36,8 +36,8 @@ RUN set -xe && \
     cmake -DCMAKE_CXX_STANDARD=11 . && \
     make install -j $THREADS && \
     cd .. && \
-    git clone https://github.com/hooleeas/subconverter-new --depth=1 subconverter && \
-    cd subconverter && \
+    git clone https://github.com/hooleeas/SUB-CVT --depth=1 sub-cvt && \
+    cd sub-cvt && \
     python3 -m ensurepip && \
     python3 -m pip install gitpython && \
     python3 scripts/update_rules.py -c scripts/rules_config.conf && \
@@ -48,10 +48,10 @@ RUN set -xe && \
 FROM alpine:3.16
 LABEL maintainer="tindy.it@gmail.com"
 
-RUN apk add --no-cache --virtual subconverter-deps pcre2 libcurl yaml-cpp
+RUN apk add --no-cache --virtual sub-cvt-deps pcre2 libcurl yaml-cpp
 
-COPY --from=builder /subconverter/subconverter /usr/bin/
-COPY --from=builder /subconverter/base /base/
+COPY --from=builder /sub-cvt/subconverter /usr/bin/
+COPY --from=builder /sub-cvt/base /base/
 
 ENV TZ=Africa/Abidjan
 RUN ln -sf /usr/share/zoneinfo/$TZ /etc/localtime

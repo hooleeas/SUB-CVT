@@ -1,7 +1,7 @@
 #ifndef VERSION_H_INCLUDED
 #define VERSION_H_INCLUDED
 
-#define PRODUCT_NAME "subconverter-new"
-#define VERSION "v0.9.10"
+#define PRODUCT_NAME "SUB-CVT"
+#define VERSION "v0.1.0"
 
 #endif // VERSION_H_INCLUDED

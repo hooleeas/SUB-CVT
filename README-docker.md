@@ -1,11 +1,11 @@
-# Docker deployment
+# SUB-CVT Docker deployment
 
 ## Run
 
 ```bash
-docker run -d --name subconverter --restart=always \
+docker run -d --name sub-cvt --restart=always \
   -p 25500:25500 \
-  ghcr.io/hooleeas/subconverter-new:latest
+  ghcr.io/hooleeas/sub-cvt:latest
 ```
 
 Verify the container:
@@ -17,16 +17,16 @@ curl http://localhost:25500/version
 The expected response is:
 
 ```text
-subconverter-new v0.9.10 backend
+SUB-CVT v0.1.0
 ```
 
 ## Docker Compose
 
 ```yaml
 services:
-  subconverter:
-    image: ghcr.io/hooleeas/subconverter-new:latest
-    container_name: subconverter
+  sub-cvt:
+    image: ghcr.io/hooleeas/sub-cvt:latest
+    container_name: sub-cvt
     ports:
       - "25500:25500"
     restart: always
@@ -46,7 +46,7 @@ curl -F "data=@newpref.ini" \
 Copy replacement preferences, rules, snippets, or profiles into `/base/`:
 
 ```dockerfile
-FROM ghcr.io/hooleeas/subconverter-new:latest
+FROM ghcr.io/hooleeas/sub-cvt:latest
 COPY replacements/ /base/
 EXPOSE 25500
 ```
@@ -54,7 +54,7 @@ EXPOSE 25500
 Build and run it:
 
 ```bash
-docker build -t subconverter-new-custom:latest .
-docker run -d --name subconverter --restart=always \
-  -p 25500:25500 subconverter-new-custom:latest
+docker build -t sub-cvt-custom:latest .
+docker run -d --name sub-cvt --restart=always \
+  -p 25500:25500 sub-cvt-custom:latest
 ```

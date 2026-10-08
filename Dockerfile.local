@@ -37,8 +37,8 @@ RUN set -xe && \
     cd ..
 
 # Copy local source instead of cloning from GitHub
-COPY . /subconverter
-WORKDIR /subconverter
+COPY . /sub-cvt
+WORKDIR /sub-cvt
 RUN python3 -m ensurepip && \
     python3 -m pip install gitpython && \
     python3 scripts/update_rules.py -c scripts/rules_config.conf && \
@@ -47,9 +47,9 @@ RUN python3 -m ensurepip && \
 
 # build final image
 FROM alpine:3.16
-RUN apk add --no-cache --virtual subconverter-deps pcre2 libcurl yaml-cpp
-COPY --from=builder /subconverter/subconverter /usr/bin/
-COPY --from=builder /subconverter/base /base/
+RUN apk add --no-cache --virtual sub-cvt-deps pcre2 libcurl yaml-cpp
+COPY --from=builder /sub-cvt/subconverter /usr/bin/
+COPY --from=builder /sub-cvt/base /base/
 ENV TZ=Africa/Abidjan
 RUN ln -sf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 WORKDIR /base

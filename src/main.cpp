@@ -177,16 +177,9 @@ int main(int argc, char *argv[])
     if(global.generatorMode)
         return simpleGenerator();
 
-    /*
-    webServer.append_response("GET", "/", "text/plain", [](RESPONSE_CALLBACK_ARGS) -> std::string
-    {
-        return PRODUCT_NAME " " VERSION " backend\n";
-    });
-    */
-
     webServer.append_response("GET", "/version", "text/plain", [](RESPONSE_CALLBACK_ARGS) -> std::string
     {
-        return PRODUCT_NAME " " VERSION " backend\n";
+        return PRODUCT_NAME " " VERSION "\n";
     });
 
     webServer.append_response("GET", "/refreshrules", "text/plain", [](RESPONSE_CALLBACK_ARGS) -> std::string
