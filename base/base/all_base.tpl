@@ -269,6 +269,7 @@ enhanced-mode-by-rule = true
 {% if request.target == "singbox" %}
 
 {
+    "$schema": "https://sing-box.sagernet.org/schema.json",
     "log": {
         "disabled": false,
         "level": "info",

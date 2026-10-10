@@ -52,6 +52,8 @@ services:
 | V2Ray | Yes | Yes |
 | Sing-box | Yes | Yes |
 
+Sing-box output uses the current configuration format. WireGuard is emitted as an `endpoint` rather than a regular outbound, so it is not added to selector/urltest groups. `REJECT` rules use the route `reject` action; legacy `REJECT` items in selector groups are removed with a warning.
+
 ## Conversion endpoint
 
 ```text

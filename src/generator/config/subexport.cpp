@@ -2614,12 +2614,17 @@ static std::string formatSingBoxInterval(Integer interval) {
     return result;
 }
 
+static rapidjson::Value stringArrayToJsonArray(const std::string &array, const std::string &delimiter,
+                                               rapidjson::MemoryPoolAllocator<> &allocator);
+
 static rapidjson::Value buildSingBoxTransport(const Proxy &proxy, rapidjson::MemoryPoolAllocator<> &allocator) {
     rapidjson::Value transport(rapidjson::kObjectType);
     switch (hash_(proxy.TransferProtocol)) {
         case "http"_hash: {
-            if (!proxy.Host.empty())
-                transport.AddMember("host", rapidjson::StringRef(proxy.Host.c_str()), allocator);
+            if (!proxy.Host.empty()) {
+                auto hosts = stringArrayToJsonArray(proxy.Host, ",", allocator);
+                transport.AddMember("host", hosts, allocator);
+            }
             [[fallthrough]];
         }
         case "ws"_hash: {
@@ -2685,6 +2690,81 @@ vectorToJsonArray(const std::vector<std::string> &array, rapidjson::MemoryPoolAl
     return result;
 }
 
+static bool appendSingBoxWireGuardRoutes(rapidjson::Document &json) {
+    if (!json.HasMember("endpoints") || !json["endpoints"].IsArray())
+        return true;
+
+    bool hasWireGuardEndpoint = false;
+    for (const auto &endpoint: json["endpoints"].GetArray()) {
+        if (endpoint.IsObject() && endpoint.HasMember("type") && endpoint["type"].IsString() &&
+            std::string(endpoint["type"].GetString()) == "wireguard") {
+            hasWireGuardEndpoint = true;
+            break;
+        }
+    }
+    if (!hasWireGuardEndpoint)
+        return true;
+
+    auto &allocator = json.GetAllocator();
+    if (!json.HasMember("route"))
+        json.AddMember("route", rapidjson::Value(rapidjson::kObjectType), allocator);
+    if (!json["route"].IsObject()) {
+        writeLog(0, "Cannot add sing-box WireGuard endpoint routes: route must be an object", LOG_LEVEL_ERROR);
+        return false;
+    }
+    auto &route = json["route"];
+    if (!route.HasMember("rules"))
+        route.AddMember("rules", rapidjson::Value(rapidjson::kArrayType), allocator);
+    if (!route["rules"].IsArray()) {
+        writeLog(0, "Cannot add sing-box WireGuard endpoint routes: route.rules must be an array", LOG_LEVEL_ERROR);
+        return false;
+    }
+
+    auto &rules = route["rules"];
+    for (const auto &endpoint: json["endpoints"].GetArray()) {
+        if (!endpoint.IsObject() || !endpoint.HasMember("type") || !endpoint["type"].IsString() ||
+            std::string(endpoint["type"].GetString()) != "wireguard" ||
+            !endpoint.HasMember("tag") || !endpoint["tag"].IsString() ||
+            !endpoint.HasMember("peers") || !endpoint["peers"].IsArray())
+            continue;
+
+        const std::string tag = endpoint["tag"].GetString();
+        for (const auto &peer: endpoint["peers"].GetArray()) {
+            if (!peer.IsObject() || !peer.HasMember("allowed_ips") || !peer["allowed_ips"].IsArray())
+                continue;
+            for (const auto &allowed_ip: peer["allowed_ips"].GetArray()) {
+                if (!allowed_ip.IsString())
+                    continue;
+
+                bool exists = std::any_of(rules.Begin(), rules.End(), [&](const rapidjson::Value &rule) {
+                    if (!rule.IsObject() || !rule.HasMember("action") || !rule["action"].IsString() ||
+                        std::string(rule["action"].GetString()) != "route" ||
+                        !rule.HasMember("outbound") || !rule["outbound"].IsString() ||
+                        std::string(rule["outbound"].GetString()) != tag ||
+                        !rule.HasMember("ip_cidr") || !rule["ip_cidr"].IsArray())
+                        return false;
+                    return std::any_of(rule["ip_cidr"].Begin(), rule["ip_cidr"].End(),
+                                       [&](const rapidjson::Value &cidr) {
+                                           return cidr.IsString() &&
+                                                  std::string(cidr.GetString()) == allowed_ip.GetString();
+                                       });
+                });
+                if (exists)
+                    continue;
+
+                rapidjson::Value endpoint_rule(rapidjson::kObjectType);
+                rapidjson::Value ip_cidr(rapidjson::kArrayType);
+                ip_cidr.PushBack(rapidjson::Value(allowed_ip.GetString(), allocator), allocator);
+                endpoint_rule.AddMember("ip_cidr", ip_cidr, allocator);
+                endpoint_rule.AddMember("action", "route", allocator);
+                endpoint_rule.AddMember("outbound", rapidjson::Value(tag.c_str(), allocator), allocator);
+                rules.PushBack(endpoint_rule, allocator);
+            }
+        }
+    }
+    return true;
+}
+
 void
 proxyToSingBox(std::vector<Proxy> &nodes, rapidjson::Document &json,
                std::vector<RulesetContent> &ruleset_content_array,
@@ -2692,15 +2772,15 @@ proxyToSingBox(std::vector<Proxy> &nodes, rapidjson::Document &json,
     using namespace rapidjson_ext;
     rapidjson::Document::AllocatorType &allocator = json.GetAllocator();
     rapidjson::Value outbounds(rapidjson::kArrayType), route(rapidjson::kArrayType);
+    rapidjson::Value endpoints(rapidjson::kArrayType);
     std::vector<Proxy> nodelist;
     string_array remarks_list;
     std::string search = " Mbps";
+    ext.reject_only_groups.clear();
 
     if (!ext.nodelist) {
         auto direct = buildObject(allocator, "type", "direct", "tag", "DIRECT");
         outbounds.PushBack(direct, allocator);
-        auto reject = buildObject(allocator, "type", "block", "tag", "REJECT");
-        outbounds.PushBack(reject, allocator);
         // auto dns = buildObject(allocator, "type", "dns", "tag", "dns-out");
         // outbounds.PushBack(dns, allocator);
     }
@@ -2789,7 +2869,10 @@ proxyToSingBox(std::vector<Proxy> &nodes, rapidjson::Document &json,
                         break;
                     case "http"_hash:
                         vlesstransport.AddMember("type", rapidjson::StringRef("http"), allocator);
-                        vlesstransport.AddMember("host", rapidjson::StringRef(x.Host.c_str()), allocator);
+                        if (!x.Host.empty()) {
+                            auto hosts = stringArrayToJsonArray(x.Host, ",", allocator);
+                            vlesstransport.AddMember("host", hosts, allocator);
+                        }
                         vlesstransport.AddMember("method", rapidjson::StringRef("GET"), allocator);
                         vlesstransport.AddMember("path", rapidjson::StringRef(x.Path.c_str()), allocator);
                         addHeaders(vlesstransport, x, allocator);
@@ -2822,40 +2905,94 @@ proxyToSingBox(std::vector<Proxy> &nodes, rapidjson::Document &json,
                 break;
             }
             case ProxyType::WireGuard: {
+                bool is_group_member = std::any_of(
+                    extra_proxy_group.begin(), extra_proxy_group.end(), [&x](const ProxyGroupConfig &group) {
+                        return std::find(group.Proxies.begin(), group.Proxies.end(), x.Remark) != group.Proxies.end();
+                    });
+                if (is_group_member) {
+                    writeLog(0, "sing-box WireGuard endpoints are not regular outbounds and cannot be added to "
+                                "selector/urltest groups: " + x.Remark, LOG_LEVEL_WARNING);
+                }
                 proxy.AddMember("type", "wireguard", allocator);
                 proxy.AddMember("tag", rapidjson::StringRef(x.Remark.c_str()), allocator);
-                proxy.AddMember("inet4_bind_address", rapidjson::StringRef(x.SelfIP.c_str()), allocator);
                 rapidjson::Value addresses(rapidjson::kArrayType);
-                addresses.PushBack(rapidjson::StringRef(x.SelfIP.append("/32").c_str()), allocator);
-                //                if (!x.SelfIPv6.empty())
-                //                    addresses.PushBack(rapidjson::StringRef(x.SelfIPv6.c_str()), allocator);
-                proxy.AddMember("local_address", addresses, allocator);
-                if (!x.SelfIPv6.empty())
-                    proxy.AddMember("inet6_bind_address", rapidjson::StringRef(x.SelfIPv6.c_str()), allocator);
+                if (!x.SelfIP.empty()) {
+                    std::string address = x.SelfIP;
+                    if (address.find('/') == std::string::npos)
+                        address += "/32";
+                    addresses.PushBack(rapidjson::Value(address.c_str(), allocator), allocator);
+                }
+                if (!x.SelfIPv6.empty()) {
+                    std::string address = x.SelfIPv6;
+                    if (address.find('/') == std::string::npos)
+                        address += "/128";
+                    addresses.PushBack(rapidjson::Value(address.c_str(), allocator), allocator);
+                }
+                if (addresses.Empty()) {
+                    writeLog(0, "Skipping sing-box WireGuard endpoint without a local address: " + x.Remark,
+                             LOG_LEVEL_WARNING);
+                    continue;
+                }
+                proxy.AddMember("system", false, allocator);
+                proxy.AddMember("address", addresses, allocator);
                 proxy.AddMember("private_key", rapidjson::StringRef(x.PrivateKey.c_str()), allocator);
+                if (x.Mtu > 0)
+                    proxy.AddMember("mtu", x.Mtu, allocator);
                 rapidjson::Value peer(rapidjson::kObjectType);
-                peer.AddMember("server", rapidjson::StringRef(x.Hostname.c_str()), allocator);
-                peer.AddMember("server_port", x.Port, allocator);
+                peer.AddMember("address", rapidjson::StringRef(x.Hostname.c_str()), allocator);
+                peer.AddMember("port", x.Port, allocator);
                 peer.AddMember("public_key", rapidjson::StringRef(x.PublicKey.c_str()), allocator);
                 if (!x.PreSharedKey.empty())
                     peer.AddMember("pre_shared_key", rapidjson::StringRef(x.PreSharedKey.c_str()), allocator);
 
-                if (!x.AllowedIPs.empty()) {
-                    auto allowed_ips = stringArrayToJsonArray(x.AllowedIPs, ",", allocator);
-                    peer.AddMember("allowed_ips", allowed_ips, allocator);
-                }
+                const std::string allowed_ips_value =
+                    x.AllowedIPs.empty() ? "0.0.0.0/0, ::/0" : x.AllowedIPs;
+                auto allowed_ips = stringArrayToJsonArray(allowed_ips_value, ",", allocator);
+                peer.AddMember("allowed_ips", allowed_ips, allocator);
 
+                if (x.KeepAlive > 0)
+                    peer.AddMember("persistent_keepalive_interval", x.KeepAlive, allocator);
                 if (!x.ClientId.empty()) {
-                    auto reserved = stringArrayToJsonArray(x.ClientId, ",", allocator);
+                    rapidjson::Value reserved(rapidjson::kArrayType);
+                    for (const auto &value: split(x.ClientId, ",")) {
+                        if (isNumeric(trim(value)))
+                            reserved.PushBack(to_int(trim(value)), allocator);
+                    }
                     peer.AddMember("reserved", reserved, allocator);
-                }
-                if (!x.Password.empty()) {
-                    proxy.AddMember("pre_shared_key", rapidjson::StringRef(x.Password.c_str()), allocator);
                 }
                 rapidjson::Value peers(rapidjson::kArrayType);
                 peers.PushBack(peer, allocator);
                 proxy.AddMember("peers", peers, allocator);
-                proxy.AddMember("mtu", x.Mtu, allocator);
+                endpoints.PushBack(proxy, allocator);
+                continue;
+            }
+            case ProxyType::TUIC: {
+                addSingBoxCommonMembers(proxy, x, "tuic", allocator);
+                proxy.AddMember("password", rapidjson::StringRef(x.Password.c_str()), allocator);
+                proxy.AddMember("uuid", rapidjson::StringRef(x.UserId.c_str()), allocator);
+                rapidjson::Value tls(rapidjson::kObjectType);
+                tls.AddMember("enabled", true, allocator);
+                if (!x.ServerName.empty())
+                    tls.AddMember("server_name", rapidjson::StringRef(x.ServerName.c_str()), allocator);
+                if (!scv.is_undef())
+                    tls.AddMember("insecure", buildBooleanValue(scv), allocator);
+                if (!x.Alpn.empty()) {
+                    auto alpns = stringArrayToJsonArray(x.Alpn, ",", allocator);
+                    tls.AddMember("alpn", alpns, allocator);
+                }
+                if (!x.DisableSni.is_undef())
+                    tls.AddMember("disable_sni", buildBooleanValue(x.DisableSni), allocator);
+                proxy.AddMember("tls", tls, allocator);
+                if (!x.CongestionControl.empty()) {
+                    proxy.AddMember("congestion_control", rapidjson::StringRef(x.CongestionControl.c_str()),
+                                    allocator);
+                }
+                if (!x.UdpRelayMode.empty()) {
+                    proxy.AddMember("udp_relay_mode", rapidjson::StringRef(x.UdpRelayMode.c_str()), allocator);
+                }
+                if (!x.ReduceRtt.is_undef()) {
+                    proxy.AddMember("zero_rtt_handshake", buildBooleanValue(x.ReduceRtt), allocator);
+                }
                 break;
             }
             case ProxyType::HTTP:
@@ -2958,39 +3095,6 @@ proxyToSingBox(std::vector<Proxy> &nodes, rapidjson::Document &json,
                 }
                 break;
             }
-            case ProxyType::TUIC: {
-                addSingBoxCommonMembers(proxy, x, "tuic", allocator);
-                proxy.AddMember("password", rapidjson::StringRef(x.Password.c_str()), allocator);
-                proxy.AddMember("uuid", rapidjson::StringRef(x.UserId.c_str()), allocator);
-                if (!x.TLSSecure && !x.Alpn.empty()) {
-                    rapidjson::Value tls(rapidjson::kObjectType);
-                    tls.AddMember("enabled", true, allocator);
-                    if (!scv.is_undef()) {
-                        tls.AddMember("insecure", buildBooleanValue(scv), allocator);
-                    }
-                    if (!x.ServerName.empty())
-                        tls.AddMember("server_name", rapidjson::StringRef(x.ServerName.c_str()), allocator);
-                    if (!x.Alpn.empty()) {
-                        auto alpns = stringArrayToJsonArray(x.Alpn, ",", allocator);
-                        tls.AddMember("alpn", alpns, allocator);
-                    }
-                    if (!x.DisableSni.is_undef()) {
-                        tls.AddMember("disable_sni", buildBooleanValue(x.DisableSni), allocator);
-                    }
-                    proxy.AddMember("tls", tls, allocator);
-                }
-                if (!x.CongestionControl.empty()) {
-                    proxy.AddMember("congestion_control", rapidjson::StringRef(x.CongestionControl.c_str()),
-                                    allocator);
-                }
-                if (!x.UdpRelayMode.empty()) {
-                    proxy.AddMember("udp_relay_mode", rapidjson::StringRef(x.UdpRelayMode.c_str()), allocator);
-                }
-                if (!x.ReduceRtt.is_undef()) {
-                    proxy.AddMember("zero_rtt_handshake", buildBooleanValue(x.ReduceRtt), allocator);
-                }
-                break;
-            }
             case ProxyType::AnyTLS: {
                 addSingBoxCommonMembers(proxy, x, "anytls", allocator);
                 proxy.AddMember("password", rapidjson::StringRef(x.Password.c_str()), allocator);
@@ -3017,7 +3121,7 @@ proxyToSingBox(std::vector<Proxy> &nodes, rapidjson::Document &json,
             default:
                 continue;
         }
-        if (x.TLSSecure) {
+        if (x.TLSSecure && x.Type != ProxyType::TUIC) {
             rapidjson::Value tls(rapidjson::kObjectType);
             tls.AddMember("enabled", true, allocator);
             if (!x.ServerName.empty())
@@ -3068,9 +3172,12 @@ proxyToSingBox(std::vector<Proxy> &nodes, rapidjson::Document &json,
 
     if (ext.nodelist) {
         json | AddMemberOrReplace("outbounds", outbounds, allocator);
+        if (!endpoints.Empty())
+            json | AddMemberOrReplace("endpoints", endpoints, allocator);
         return;
     }
 
+    string_array reject_only_groups;
     for (const ProxyGroupConfig &x: extra_proxy_group) {
         string_array filtered_nodelist;
         std::string type;
@@ -3088,9 +3195,32 @@ proxyToSingBox(std::vector<Proxy> &nodes, rapidjson::Document &json,
             default:
                 continue;
         }
-        for (const auto &y: x.Proxies)
+        const auto is_reject = [](const std::string &tag) {
+            return tag == "REJECT" || tag == "[]REJECT";
+        };
+        if (!x.Proxies.empty() && std::all_of(x.Proxies.begin(), x.Proxies.end(), is_reject)) {
+            reject_only_groups.emplace_back(x.Name);
+            writeLog(0, "sing-box reject-only proxy group '" + x.Name +
+                        "' is represented by route reject actions instead of a selector",
+                     LOG_LEVEL_WARNING);
+            continue;
+        }
+        for (const auto &y: x.Proxies) {
+            if (is_reject(y)) {
+                filtered_nodelist.emplace_back("REJECT");
+                continue;
+            }
             groupGenerate(y, nodelist, filtered_nodelist, true, ext);
+        }
 
+        auto reject = std::remove_if(filtered_nodelist.begin(), filtered_nodelist.end(), [](const std::string &tag) {
+            return tag == "REJECT" || tag == "[]REJECT";
+        });
+        if (reject != filtered_nodelist.end()) {
+            filtered_nodelist.erase(reject, filtered_nodelist.end());
+            writeLog(0, "sing-box selector groups cannot include REJECT; removed the legacy reject outbound",
+                     LOG_LEVEL_WARNING);
+        }
         if (filtered_nodelist.empty())
             filtered_nodelist.emplace_back("DIRECT");
 
@@ -3128,6 +3258,9 @@ proxyToSingBox(std::vector<Proxy> &nodes, rapidjson::Document &json,
     }
 
     json | AddMemberOrReplace("outbounds", outbounds, allocator);
+    if (!endpoints.Empty())
+        json | AddMemberOrReplace("endpoints", endpoints, allocator);
+    ext.reject_only_groups = std::move(reject_only_groups);
 }
 
 std::string proxyToSingBox(std::vector<Proxy> &nodes, const std::string &base_conf,
@@ -3149,10 +3282,46 @@ std::string proxyToSingBox(std::vector<Proxy> &nodes, const std::string &base_co
 
     proxyToSingBox(nodes, json, ruleset_content_array, extra_proxy_group, ext);
 
-    if (ext.nodelist || !ext.enable_rule_generator)
+    if (ext.nodelist)
         return json | SerializeObject();
 
-    rulesetToSingBox(json, ruleset_content_array, ext.overwrite_original_rules);
+    if (!ext.enable_rule_generator) {
+        if (!appendSingBoxWireGuardRoutes(json))
+            return "";
+        return json | SerializeObject();
+    }
+
+    if (!ext.overwrite_original_rules && json.HasMember("route") && json["route"].IsObject()) {
+        auto isRejectOnlyGroup = [&ext](const rapidjson::Value &tag) {
+            return tag.IsString() &&
+                   std::find(ext.reject_only_groups.begin(), ext.reject_only_groups.end(), tag.GetString()) !=
+                       ext.reject_only_groups.end();
+        };
+        auto &route = json["route"];
+        if (route.HasMember("rules") && route["rules"].IsArray()) {
+            for (auto &rule: route["rules"].GetArray()) {
+                if (!rule.IsObject() || !rule.HasMember("outbound") || !isRejectOnlyGroup(rule["outbound"]))
+                    continue;
+                rule.RemoveMember("outbound");
+                if (rule.HasMember("action"))
+                    rule["action"].SetString("reject", json.GetAllocator());
+                else
+                    rule.AddMember("action", "reject", json.GetAllocator());
+            }
+        }
+        if (route.HasMember("final") && isRejectOnlyGroup(route["final"]))
+            route["final"].SetString("REJECT", json.GetAllocator());
+    }
+
+    auto singbox_rulesets = ruleset_content_array;
+    for (auto &ruleset: singbox_rulesets) {
+        if (std::find(ext.reject_only_groups.begin(), ext.reject_only_groups.end(), ruleset.rule_group) !=
+            ext.reject_only_groups.end())
+            ruleset.rule_group = "REJECT";
+    }
+    rulesetToSingBox(json, singbox_rulesets, ext.overwrite_original_rules);
+    if (!appendSingBoxWireGuardRoutes(json))
+        return "";
 
     return json | SerializeObject();
 }

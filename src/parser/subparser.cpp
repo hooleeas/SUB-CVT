@@ -3021,7 +3021,16 @@ void explodeSingboxTransport(rapidjson::Value &singboxNode, std::string &net, st
         net = GetMember(transport, "type");
         switch (hash_(net)) {
             case "http"_hash: {
-                host = GetMember(transport, "host");
+                if (transport.HasMember("host") && transport["host"].IsArray()) {
+                    string_array hosts;
+                    for (const auto &item: transport["host"].GetArray()) {
+                        if (item.IsString())
+                            hosts.emplace_back(item.GetString());
+                    }
+                    host = join(hosts, ",");
+                } else {
+                    host = GetMember(transport, "host");
+                }
                 break;
             }
             case "ws"_hash: {
@@ -3188,7 +3197,16 @@ void explodeSingbox(rapidjson::Value &outbounds, std::vector<Proxy> &nodes) {
                                     break;
                                 }
                                 case "http"_hash: {
-                                    host = GetMember(transport, "host");
+                                    if (transport.HasMember("host") && transport["host"].IsArray()) {
+                                        string_array hosts;
+                                        for (const auto &item: transport["host"].GetArray()) {
+                                            if (item.IsString())
+                                                hosts.emplace_back(item.GetString());
+                                        }
+                                        host = join(hosts, ",");
+                                    } else {
+                                        host = GetMember(transport, "host");
+                                    }
                                     path = GetMember(transport, "path");
                                     edge.clear();
                                     break;
@@ -3298,6 +3316,64 @@ void explodeSingbox(rapidjson::Value &outbounds, std::vector<Proxy> &nodes) {
                 index++;
             }
         }
+    }
+}
+
+void explodeSingboxEndpoints(rapidjson::Value &endpoints, std::vector<Proxy> &nodes) {
+    for (auto &endpoint: endpoints.GetArray()) {
+        if (!endpoint.IsObject() || GetMember(endpoint, "type") != "wireguard" ||
+            !endpoint.HasMember("peers") || !endpoint["peers"].IsArray() || endpoint["peers"].Empty())
+            continue;
+
+        if (endpoint["peers"].Size() > 1) {
+            writeLog(0, "sing-box WireGuard endpoint '" + GetMember(endpoint, "tag") +
+                        "' has multiple peers; only the first peer can be represented by the converter",
+                     LOG_LEVEL_WARNING);
+        }
+        const auto &peer = endpoint["peers"][0];
+        std::string address, ipv6, allowed_ips, reserved;
+        if (endpoint.HasMember("address") && endpoint["address"].IsArray()) {
+            for (const auto &item: endpoint["address"].GetArray()) {
+                if (!item.IsString())
+                    continue;
+                std::string value = item.GetString();
+                const auto prefix = value.find('/');
+                if (prefix != std::string::npos)
+                    value.erase(prefix);
+                if (isIPv4(value) && address.empty())
+                    address = value;
+                else if (isIPv6(value) && ipv6.empty())
+                    ipv6 = value;
+            }
+        }
+        if (peer.HasMember("allowed_ips") && peer["allowed_ips"].IsArray()) {
+            string_array values;
+            for (const auto &item: peer["allowed_ips"].GetArray()) {
+                if (item.IsString())
+                    values.emplace_back(item.GetString());
+            }
+            allowed_ips = join(values, ",");
+        }
+        if (peer.HasMember("reserved") && peer["reserved"].IsArray()) {
+            string_array values;
+            for (const auto &item: peer["reserved"].GetArray()) {
+                if (item.IsInt())
+                    values.emplace_back(std::to_string(item.GetInt()));
+            }
+            reserved = join(values, ",");
+        }
+
+        Proxy node;
+        string_array dns_server = {"8.8.8.8"};
+        wireguardConstruct(node, WG_DEFAULT_GROUP, GetMember(endpoint, "tag"),
+                           GetMember(peer, "address"), GetMember(peer, "port"),
+                           address, ipv6, GetMember(endpoint, "private_key"),
+                           GetMember(peer, "public_key"), GetMember(peer, "pre_shared_key"),
+                           dns_server, GetMember(endpoint, "mtu"),
+                           GetMember(peer, "persistent_keepalive_interval"), "", reserved, tribool(), "");
+        node.AllowedIPs = allowed_ips.empty() ? "0.0.0.0/0, ::/0" : allowed_ips;
+        node.Id = static_cast<uint32_t>(nodes.size());
+        nodes.emplace_back(std::move(node));
     }
 }
 
@@ -3469,22 +3545,19 @@ void explodeSub(std::string sub, std::vector<Proxy> &nodes) {
         throw;
     }
     try {
-        std::string pattern = "\"?(inbounds)\"?:";
-        if (!processed &&
-            regFind(sub, pattern)) {
-            pattern = "\"?(outbounds)\"?:";
-            if (regFind(sub, pattern)) {
-                pattern = "\"?(route)\"?:";
-                if (regFind(sub, pattern)) {
-                    rapidjson::Document document;
-                    document.Parse(sub.c_str());
-                    if (!document.HasParseError() || document.IsObject()) {
-                        rapidjson::Value &value = document["outbounds"];
-                        if (value.IsArray() && !value.Empty()) {
-                            explodeSingbox(value, nodes);
-                            processed = true;
-                        }
-                    }
+        if (!processed && (regFind(sub, "\"?(outbounds|endpoints)\"?:"))) {
+            rapidjson::Document document;
+            document.Parse(sub.c_str());
+            if (!document.HasParseError() && document.IsObject()) {
+                if (document.HasMember("outbounds") && document["outbounds"].IsArray() &&
+                    !document["outbounds"].Empty()) {
+                    explodeSingbox(document["outbounds"], nodes);
+                    processed = true;
+                }
+                if (document.HasMember("endpoints") && document["endpoints"].IsArray() &&
+                    !document["endpoints"].Empty()) {
+                    explodeSingboxEndpoints(document["endpoints"], nodes);
+                    processed = true;
                 }
             }
         }

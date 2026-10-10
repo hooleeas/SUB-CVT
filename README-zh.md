@@ -76,6 +76,8 @@ http://127.0.0.1:25500/sub?target=%TARGET%&url=%URL%&config=%CONFIG%
 | V2Ray | 是 | 是 |
 | Sing-box | 是 | 是 |
 
+Sing-box 输出使用新版配置格式。WireGuard 会生成为 `endpoints`，不再作为普通节点加入 selector/urltest 节点组；`REJECT` 规则会转换为路由 `reject` action，selector 组中的旧 `REJECT` 项会被移除并记录警告。
+
 ## 配置文件
 
 默认配置文件位于 `base/`。偏好设置示例：

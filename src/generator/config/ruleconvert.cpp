@@ -506,16 +506,22 @@ static rapidjson::Value transformRuleToSingBox(std::vector<std::string_view> &ar
     type = replaceAllDistinct(type, "src_", "source_");
     if (type == "geoip" || type == "geosite")
         return rapidjson::Value(rapidjson::kObjectType);
-    if (type == "match" || type == "final")
-    {
+    if ((type == "match" || type == "final") && value == "reject") {
+        rule_obj.AddMember("action", "reject", allocator);
+        return rule_obj;
+    }
+    if (type == "match" || type == "final") {
         rule_obj.AddMember("outbound", rapidjson::Value(value.data(), value.size(), allocator), allocator);
-    }
-    else
-    {
+        rule_obj.AddMember("action", "route", allocator);
+    } else {
         rule_obj.AddMember(rapidjson::Value(type.c_str(), allocator), rapidjson::Value(value.data(), value.size(), allocator), allocator);
-        rule_obj.AddMember("outbound", rapidjson::Value(group.c_str(), allocator), allocator);
+        if (group == "REJECT") {
+            rule_obj.AddMember("action", "reject", allocator);
+        } else {
+            rule_obj.AddMember("outbound", rapidjson::Value(group.c_str(), allocator), allocator);
+            rule_obj.AddMember("action", "route", allocator);
+        }
     }
-    rule_obj.AddMember("action", "route", allocator);
     return rule_obj;
 }
 
@@ -555,6 +561,20 @@ void rulesetToSingBox(rapidjson::Document &base_rule, std::vector<RulesetContent
     {
         if (base_rule.HasMember("route") && base_rule["route"].HasMember("rules") && base_rule["route"]["rules"].IsArray())
             rules.Swap(base_rule["route"]["rules"]);
+    }
+    if (!overwrite_original_rules && base_rule.HasMember("route") && base_rule["route"].IsObject() &&
+        base_rule["route"].HasMember("final") && base_rule["route"]["final"].IsString() &&
+        std::string(base_rule["route"]["final"].GetString()) == "REJECT")
+        final = "REJECT";
+    for (auto &rule: rules.GetArray()) {
+        if (!rule.IsObject() || !rule.HasMember("outbound") || !rule["outbound"].IsString() ||
+            std::string(rule["outbound"].GetString()) != "REJECT")
+            continue;
+        rule.RemoveMember("outbound");
+        if (rule.HasMember("action"))
+            rule["action"].SetString("reject", allocator);
+        else
+            rule.AddMember("action", "reject", allocator);
     }
 
     // These rules are required for current sing-box TUN routing and must be
@@ -630,14 +650,30 @@ void rulesetToSingBox(rapidjson::Document &base_rule, std::vector<RulesetContent
             appendSingBoxRule(temp, rule, strLine, allocator);
         }
         if (rule.ObjectEmpty()) continue;
-        rule.AddMember("outbound", rapidjson::Value(rule_group.c_str(), allocator), allocator);
-        rule.AddMember("action", "route", allocator);
+        if (rule_group == "REJECT") {
+            rule.AddMember("action", "reject", allocator);
+        } else {
+            rule.AddMember("outbound", rapidjson::Value(rule_group.c_str(), allocator), allocator);
+            rule.AddMember("action", "route", allocator);
+        }
         rules.PushBack(rule, allocator);
     }
 
     if (!base_rule.HasMember("route"))
         base_rule.AddMember("route", rapidjson::Value(rapidjson::kObjectType), allocator);
 
+    if (!overwrite_original_rules && final.empty() && base_rule["route"].IsObject() &&
+        base_rule["route"].HasMember("final") &&
+        base_rule["route"]["final"].IsString())
+        final = base_rule["route"]["final"].GetString();
+    if (final == "REJECT") {
+        rapidjson::Value reject_rule(rapidjson::kObjectType);
+        reject_rule.AddMember("action", "reject", allocator);
+        rules.PushBack(reject_rule, allocator);
+        final = "DIRECT";
+    }
+    if (final.empty())
+        final = "DIRECT";
     auto finalValue = rapidjson::Value(final.c_str(), allocator);
     base_rule["route"]
     | AddMemberOrReplace("rules", rules, allocator)
