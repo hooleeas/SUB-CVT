@@ -40,17 +40,17 @@ services:
 
 ## Supported formats
 
-| Format | Source | Target |
-|---|:---:|:---:|
-| Clash / ClashR | Yes | Yes |
-| Quantumult / Quantumult X | Yes | Yes |
-| Loon | Yes | Yes |
-| Shadowsocks / ShadowsocksR | Yes | Yes |
-| SSD | Yes | Yes |
-| Surfboard | Yes | Yes |
-| Surge 2–5 | Yes | Yes |
-| V2Ray | Yes | Yes |
-| Sing-box | Yes | Yes |
+### Subscription formats and common clients
+
+| Format | Common compatible clients |
+|---|---|
+| Base64 | v2rayN (Windows), v2rayNG (Android), NekoRay (Windows/Linux), NekoBox (Android), Hiddify (multi-platform), Shadowrocket (iOS/macOS), Streisand (iOS), FoXray (iOS/macOS) |
+| Clash | Clash Verge Rev, Mihomo Party, FlClash, Clash Nyanpasu, Nextin, Clash for Windows (discontinued), Clash for Android (discontinued), Clash Meta for Android (legacy project), ClashX / ClashX Pro, Stash (iOS), OpenClash (OpenWrt) |
+| Sing-box | sing-box for Android, sing-box for Apple platforms (iOS/macOS), NekoBox (Android) |
+| Surge | Surge (iOS/macOS) |
+| Loon | Loon (iOS) |
+
+These are common examples, not an exhaustive list. Import and proxy compatibility depend on the client version, core, and protocols included in the subscription. “Clash Meta” usually refers to the Mihomo core; the name of the client application may differ.
 
 Sing-box output uses the current configuration format. WireGuard is emitted as an `endpoint` rather than a regular outbound, so it is not added to selector/urltest groups. `REJECT` rules use the route `reject` action; legacy `REJECT` items in selector groups are removed with a warning.
 

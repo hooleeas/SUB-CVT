@@ -64,19 +64,19 @@ http://127.0.0.1:25500/sub?target=%TARGET%&url=%URL%&config=%CONFIG%
 
 ## 支持的格式
 
-| 格式 | 读取 | 输出 |
-|---|:---:|:---:|
-| Clash / ClashR | 是 | 是 |
-| Quantumult / Quantumult X | 是 | 是 |
-| Loon | 是 | 是 |
-| Shadowsocks / ShadowsocksR | 是 | 是 |
-| SSD | 是 | 是 |
-| Surfboard | 是 | 是 |
-| Surge 2–5 | 是 | 是 |
-| V2Ray | 是 | 是 |
-| Sing-box | 是 | 是 |
+### 订阅地址格式与常见客户端
 
-Sing-box 输出使用新版配置格式。WireGuard 会生成为 `endpoints`，不再作为普通节点加入 selector/urltest 节点组；`REJECT` 规则会转换为路由 `reject` action，selector 组中的旧 `REJECT` 项会被移除并记录警告。
+| 格式 | 支持客户端（举例） |
+|---|---|
+| Base64 | v2rayN（Windows）、v2rayNG（Android）、NekoRay（Windows/Linux）、NekoBox（Android）、Hiddify（多平台）、Shadowrocket（iOS/macOS）、Streisand（iOS）、FoXray（iOS/macOS） |
+| Clash | Clash Verge Rev、Mihomo Party、FlClash、Clash Nyanpasu、Nextin、Clash for Windows（已停止维护）、Clash for Android（已停止维护）、Clash Meta for Android（旧项目）、ClashX / ClashX Pro、Stash（iOS）、OpenClash（OpenWrt） |
+| Sing-box | sing-box for Android、sing-box for Apple platforms（iOS/macOS）、NekoBox（Android） |
+| Surge | Surge（iOS/macOS） |
+| Loon | Loon（iOS） |
+
+以上为常见客户端示例，并非完整清单。能否导入及节点能否使用，取决于客户端版本、内核和订阅中包含的协议；“Clash Meta”通常指 Mihomo 内核，具体客户端名称可能不同。
+
+sing-box 输出使用新版配置格式。WireGuard 会生成为 `endpoints`，不再作为普通节点加入 selector/urltest 节点组；`REJECT` 规则会转换为路由 `reject` action，selector 组中的旧 `REJECT` 项会被移除并记录警告。
 
 ## 配置文件
 
