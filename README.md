@@ -9,9 +9,9 @@ A subscription converter based on [subconverter](https://github.com/tindy2013/su
 Run the current image:
 
 ```bash
-docker run -d --name sub-cvt --restart=always \
+docker run -d --name subconverter-new --restart=always \
   -p 25500:25500 \
-  ghcr.io/hooleeas/sub-cvt:latest
+  ghcr.io/hooleeas/subconverter-new:latest
 ```
 
 Check the service:
@@ -30,12 +30,22 @@ Docker Compose:
 
 ```yaml
 services:
-  sub-cvt:
-    image: ghcr.io/hooleeas/sub-cvt:latest
-    container_name: sub-cvt
+  subconverter-new:
+    image: ghcr.io/hooleeas/subconverter-new:latest
+    container_name: subconverter-new
     ports:
       - "25500:25500"
     restart: always
+```
+
+To replace a previous `sub-cvt` container, remove it before starting the new container because both use port `25500`:
+
+```bash
+docker rm -f sub-cvt
+docker pull ghcr.io/hooleeas/subconverter-new:latest
+docker run -d --name subconverter-new --restart=always \
+  -p 25500:25500 \
+  ghcr.io/hooleeas/subconverter-new:latest
 ```
 
 ## Supported formats

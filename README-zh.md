@@ -9,9 +9,9 @@ SUB-CVT 是一个订阅转换工具，基于 [subconverter](https://github.com/t
 镜像发布后，可使用以下命令启动：
 
 ```bash
-docker run -d --name sub-cvt --restart=always \
+docker run -d --name subconverter-new --restart=always \
   -p 25500:25500 \
-  ghcr.io/hooleeas/sub-cvt:latest
+  ghcr.io/hooleeas/subconverter-new:latest
 ```
 
 镜像支持 `linux/amd64`、`linux/arm64` 和 `linux/arm/v7`。Docker 会根据主机架构自动拉取对应镜像版本。Windows 主机请使用 Docker Desktop 的 Linux 容器模式。
@@ -32,9 +32,9 @@ subconverter-new v0.1.0
 
 ```yaml
 services:
-  sub-cvt:
-    image: ghcr.io/hooleeas/sub-cvt:latest
-    container_name: sub-cvt
+  subconverter-new:
+    image: ghcr.io/hooleeas/subconverter-new:latest
+    container_name: subconverter-new
     ports:
       - "25500:25500"
     restart: always
@@ -44,6 +44,16 @@ services:
 
 ```bash
 docker compose up -d
+```
+
+从旧的 `sub-cvt` 容器迁移时，由于新旧容器使用相同的 `25500` 端口，请先删除旧容器，再拉取并启动新镜像：
+
+```bash
+docker rm -f sub-cvt
+docker pull ghcr.io/hooleeas/subconverter-new:latest
+docker run -d --name subconverter-new --restart=always \
+  -p 25500:25500 \
+  ghcr.io/hooleeas/subconverter-new:latest
 ```
 
 ## 转换接口
@@ -89,7 +99,7 @@ sing-box 输出使用新版配置格式。WireGuard 会生成为 `endpoints`，�
 需要自定义偏好设置、规则、片段或配置模板时，可以基于项目镜像构建自定义镜像，并将替换文件复制到 `/base/`。例如：
 
 ```dockerfile
-FROM ghcr.io/hooleeas/sub-cvt:latest
+FROM ghcr.io/hooleeas/subconverter-new:latest
 COPY replacements/ /base/
 EXPOSE 25500
 ```

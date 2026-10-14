@@ -3,9 +3,9 @@
 ## Run
 
 ```bash
-docker run -d --name sub-cvt --restart=always \
+docker run -d --name subconverter-new --restart=always \
   -p 25500:25500 \
-  ghcr.io/hooleeas/sub-cvt:latest
+  ghcr.io/hooleeas/subconverter-new:latest
 ```
 
 Verify the container:
@@ -24,12 +24,22 @@ subconverter-new v0.1.0
 
 ```yaml
 services:
-  sub-cvt:
-    image: ghcr.io/hooleeas/sub-cvt:latest
-    container_name: sub-cvt
+  subconverter-new:
+    image: ghcr.io/hooleeas/subconverter-new:latest
+    container_name: subconverter-new
     ports:
       - "25500:25500"
     restart: always
+```
+
+To migrate from the previous `sub-cvt` container:
+
+```bash
+docker rm -f sub-cvt
+docker pull ghcr.io/hooleeas/subconverter-new:latest
+docker run -d --name subconverter-new --restart=always \
+  -p 25500:25500 \
+  ghcr.io/hooleeas/subconverter-new:latest
 ```
 
 ## Updating preferences
@@ -46,7 +56,7 @@ curl -F "data=@newpref.ini" \
 Copy replacement preferences, rules, snippets, or profiles into `/base/`:
 
 ```dockerfile
-FROM ghcr.io/hooleeas/sub-cvt:latest
+FROM ghcr.io/hooleeas/subconverter-new:latest
 COPY replacements/ /base/
 EXPOSE 25500
 ```
@@ -54,7 +64,7 @@ EXPOSE 25500
 Build and run it:
 
 ```bash
-docker build -t sub-cvt-custom:latest .
-docker run -d --name sub-cvt --restart=always \
-  -p 25500:25500 sub-cvt-custom:latest
+docker build -t subconverter-new-custom:latest .
+docker run -d --name subconverter-new --restart=always \
+  -p 25500:25500 subconverter-new-custom:latest
 ```
