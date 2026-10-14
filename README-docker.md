@@ -17,7 +17,7 @@ curl http://localhost:25500/version
 The expected response is:
 
 ```text
-SUB-CVT v0.1.0
+subconverter-new v0.1.0
 ```
 
 ## Docker Compose

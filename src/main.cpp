@@ -179,7 +179,7 @@ int main(int argc, char *argv[])
 
     webServer.append_response("GET", "/version", "text/plain", [](RESPONSE_CALLBACK_ARGS) -> std::string
     {
-        return PRODUCT_NAME " " VERSION "\n";
+        return "subconverter-new " VERSION "\n";
     });
 
     webServer.append_response("GET", "/refreshrules", "text/plain", [](RESPONSE_CALLBACK_ARGS) -> std::string

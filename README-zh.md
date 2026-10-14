@@ -25,7 +25,7 @@ curl http://localhost:25500/version
 正常时会返回：
 
 ```text
-SUB-CVT v0.1.0
+subconverter-new v0.1.0
 ```
 
 也可以使用 Docker Compose：
